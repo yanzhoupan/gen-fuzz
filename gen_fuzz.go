@@ -159,7 +159,7 @@ func (c *Context) loadFuncObj(pkg string, funcName string){
 
 
 func main(){
-	// Example command: gen-fuzz -dir=./ -funcName=Add -out=fuzz
+	// Example command: gen-fuzz -dir=./ -f=Add -o=fuzz
 	flag.Parse()
 	pkgDir := *flagPkg
 	funcName := *flagFuncName
