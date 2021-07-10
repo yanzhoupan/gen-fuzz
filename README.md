@@ -20,4 +20,4 @@ NOTE:
 TODO:
 1. Support generating fuzz function for multiple target functions (given function names/functions with pattern/all functions).(/fuzz1/fuzz.go, /fuzz2/fuzz.go, fuzz1...N are separate fuzz units for different target functions)
 2. Add flag to automatically run go-fuzz on the generated file (need to go-fuzz-build first)
-3. Automatically generate unit test from the inputs that made the function crush. (not really, because most likely there are already unit tests)
+3. Automatically generate unit test from the inputs that made the function crush. (most likely there are already unit tests)
