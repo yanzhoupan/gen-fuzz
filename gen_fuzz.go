@@ -149,7 +149,7 @@ func (c *Context) loadFuncObj(pkg string, funcName string) {
 	// Get the target function object
 	targetFuncObj := pkgs[0].Types.Scope().Lookup(funcName)
 	if targetFuncObj == nil {
-		c.failf("didn't find function %v under package %v\n", pkg, funcName)
+		c.failf("didn't find function %v under package %v\n", funcName, pkg)
 	}
 	if targetFuncObjType := reflect.TypeOf(targetFuncObj).Elem(); targetFuncObjType != reflect.TypeOf(types.Func{}) {
 		c.failf("the kind of %v should be a func, but resolved to %v", funcName, targetFuncObjType)
