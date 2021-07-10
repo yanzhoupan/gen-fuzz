@@ -60,6 +60,7 @@ func Fuzz(data []byte) int {
 // Context holds state for a gen-fuzz run. (This is copied from go-fuzz project)
 type Context struct {
 	targetFuncObj types.Object
+	targetFuncObjs []types.Object
 	inputs [][]string
 	pkgs    []*packages.Package // type-checked root packages
 
@@ -103,8 +104,9 @@ func (c *Context) writeFile(fileName string, t *template.Template, varMap map[st
 }
 
 
+// TODO: change this to support multiple functions (use targetFuncObjs instead of targetFuncObj)
 func (c *Context)parseFunc(){
-	// Output is [][]string containing name and type of the function's input
+	// Parse the target function's input and store a [][]string containing name and type
 	// such as {{"var1", "string"}, {"var2", "int32"}}
 	funcInfo := c.targetFuncObj.Type().String()  // such as func(var1 string, var2 int32)
 	inputStr := ""
@@ -127,6 +129,7 @@ func (c *Context)parseFunc(){
 }
 
 
+// TODO: Use targetFuncObjs instead of targetFuncObj
 func (c *Context) loadFuncObj(pkg string, funcName string){
 	// Resolve pkg.
 	cfg := basePackagesConfig()
@@ -173,7 +176,7 @@ func main(){
 	fmt.Printf("pkg name: %v, funcName: %v, inputs: %v\n", pkgName, funcName, c.inputs)
 
 	// Generate fuzz function to the file
-	fmt.Printf("=====Generated Func=====")
+	fmt.Printf("=====Generated Func=====\n")
 	varMap := map[string]interface{}{"pkg": pkgName, "funcName": funcName, "inputs": c.inputs}
 	t := fuzzSrc
 	c.writeFile(outFile, t, varMap)
