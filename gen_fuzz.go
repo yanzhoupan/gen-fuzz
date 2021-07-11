@@ -12,9 +12,8 @@ import (
 )
 
 var (
-	flagPkg      = flag.String("dir", "./", "Directory of the package")
-	flagFuncName = flag.String("f", "Fuzz", "Target function to do fuzz")
-	flagOutput   = flag.String("o", "fuzz", "Output file name of the generated fuzz function")
+	flagPkg      = flag.String("dir", ".", "Directory of the package")
+	flagFuncName = flag.String("functions", "targetFunction1, targetFunction2", "Target function to do fuzz on")
 )
 
 var fuzzSrc = template.Must(template.New("Fuzz").Parse(`// +build gofuzz
@@ -55,12 +54,11 @@ func Fuzz(data []byte) int {
 }
 `))
 
-// Context holds state for a gen-fuzz run. (This is copied from go-fuzz project)
+// Context holds state for a gen-fuzz run. (This is copied from go-fuzz/go-fuzz-build/main.go)
 type Context struct {
-	targetFuncObj  types.Object
-	targetFuncObjs []types.Object
-	inputs         [][]string
-	pkgs           []*packages.Package // type-checked root packages
+	targetFuncObj types.Object
+	inputs        [][]string
+	pkgs          []*packages.Package // type-checked root packages
 
 	std    map[string]bool // set of packages in the standard library
 	ignore map[string]bool // set of packages to ignore during instrumentation
@@ -96,34 +94,9 @@ func (c *Context) writeFile(fileName string, t *template.Template, varMap map[st
 	if err := t.Execute(f, varMap); err != nil {
 		c.failf("could not execute template: %v", err)
 	}
-	fmt.Printf("generated go-fuzz code into file: %v\n", fileName)
+	fmt.Printf("successfully generated go-fuzz code into file: %v\n", fileName)
 }
 
-// TODO: change this to support multiple functions (use targetFuncObjs instead of targetFuncObj)
-func (c *Context) parseFunc() {
-	// Parse the target function's input and store a [][]string containing name and type
-	// such as {{"var1", "string"}, {"var2", "int32"}}
-	funcInfo := c.targetFuncObj.Type().String() // such as func(var1 string, var2 int32)
-	inputStr := ""
-	i := strings.Index(funcInfo, "(")
-	if i >= 0 {
-		j := strings.Index(funcInfo[i:], ")")
-		if j >= 0 {
-			inputStr = funcInfo[i+1 : i+j]
-		}
-	}
-	if inputStr == "" {
-		c.failf("no inputStr found from the given function info: %v", funcInfo)
-	}
-	inputs := strings.Split(inputStr, ",")
-
-	for _, input := range inputs {
-		inputVar := strings.Split(strings.TrimSpace(input), " ")
-		c.inputs = append(c.inputs, []string{inputVar[0], inputVar[1]})
-	}
-}
-
-// TODO: Use targetFuncObjs instead of targetFuncObj
 func (c *Context) loadFuncObj(pkg string, funcName string) {
 	// Resolve pkg.
 	cfg := basePackagesConfig()
@@ -133,7 +106,7 @@ func (c *Context) loadFuncObj(pkg string, funcName string) {
 		c.failf("could not resolve package %q: %v", pkg, err)
 	}
 	if len(pkgs) == 0 {
-		c.failf("didn't find any packages...")
+		c.failf("didn't find any packages under the given dir %q...", pkg)
 	}
 	if len(pkgs) != 1 {
 		paths := make([]string, len(pkgs))
@@ -157,23 +130,57 @@ func (c *Context) loadFuncObj(pkg string, funcName string) {
 	c.targetFuncObj = targetFuncObj
 }
 
+func (c *Context) parseFunc() {
+	// Parse the target function's input and store a [][]string containing name and type
+	// such as {{"var1", "string"}, {"var2", "int32"}}
+	funcInfo := c.targetFuncObj.Type().String() // such as func(var1 string, var2 int32)
+	inputStr := ""
+	i := strings.Index(funcInfo, "(")
+	if i >= 0 {
+		j := strings.Index(funcInfo[i:], ")")
+		if j >= 0 {
+			inputStr = funcInfo[i+1 : i+j]
+		}
+	}
+	if inputStr == "" {
+		c.failf("no inputStr found from the given function info: %v", funcInfo)
+	}
+	inputs := strings.Split(inputStr, ",")
+
+	for _, input := range inputs {
+		inputVar := strings.Split(strings.TrimSpace(input), " ")
+		c.inputs = append(c.inputs, []string{inputVar[0], inputVar[1]})
+	}
+}
+
 func main() {
 	// Example command: gen-fuzz -dir=./ -f=Add -o=fuzz
 	flag.Parse()
 	pkgDir := *flagPkg
-	funcName := *flagFuncName
-	outFile := *flagOutput + ".go"
+	funcNames := *flagFuncName
+
+	funcNameList := strings.Split(funcNames, ",")
+	fmt.Println("funcNameList: ", funcNameList)
 
 	// Load and parse the target function
 	c := new(Context)
-	c.loadFuncObj(pkgDir, funcName)
-	c.parseFunc()
-	pkgName := c.targetFuncObj.Pkg().Name()
-	fmt.Printf("pkg name: %v\nfuncName: %v\ninputs: %v\noutput file:%v\n", pkgName, funcName, c.inputs, outFile)
+	for _, funcName := range funcNameList {
+		fmt.Println("================")
+		funcName = strings.TrimSpace(funcName)
+		c.loadFuncObj(pkgDir, funcName)
+		c.parseFunc()
+		pkgName := c.targetFuncObj.Pkg().Name()
+		fmt.Printf("package name: %v\nfuncName: %v\ninputs: %v\n", pkgName, funcName, c.inputs)
 
-	// Generate fuzz function to the file
-	fmt.Printf("=====generating fuzz function=====\n")
-	varMap := map[string]interface{}{"pkg": pkgName, "funcName": funcName, "inputs": c.inputs}
-	t := fuzzSrc
-	c.writeFile(outFile, t, varMap)
+		// Generate fuzz function to the output file (use fuzz_funcName/fuzz.go)
+		fmt.Printf("generating fuzz functions...\n")
+		pathName := strings.TrimRight(pkgDir, "/") + "/fuzz_" + funcName
+		err := os.MkdirAll(pathName, os.ModePerm)
+		if err != nil {
+			c.failf("err when creating target path %q, err massage is %s", pathName, err)
+		}
+		varMap := map[string]interface{}{"pkg": pkgName, "funcName": funcName, "inputs": c.inputs}
+		outputTemplate := fuzzSrc
+		c.writeFile(pathName+"/fuzz.go", outputTemplate, varMap)
+	}
 }
